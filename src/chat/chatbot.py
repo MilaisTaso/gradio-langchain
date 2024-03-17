@@ -4,8 +4,7 @@ from langchain.globals import set_verbose
 from langchain.memory import ChatMessageHistory
 from langchain_core.messages import SystemMessage
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import (ChatPromptTemplate,
-                                    HumanMessagePromptTemplate)
+from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
 from langchain_openai import ChatOpenAI
 
 from src.config import get_config
@@ -32,10 +31,12 @@ template = HumanMessagePromptTemplate.from_template(
 
 
 def generate_message(message: str, history: ChatMessageHistory) -> Iterator[str]:
-    prompt = ChatPromptTemplate.from_messages([
-        system_message,
-        template,
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            system_message,
+            template,
+        ]
+    )
     lim = ChatOpenAI(model="gpt-3.5-turbo", api_key=get_config().OPENAI_API_KEY)
     output_parser = StrOutputParser()
 

@@ -19,6 +19,7 @@ def predict(message, history):
         yield partial_message
 
 
-chat_interface = gr.ChatInterface(fn=predict,autofocus=True)
-chat_interface.queue()
-chat_interface.launch()
+if __name__ == "__main__":
+    chat_interface = gr.ChatInterface(fn=predict, autofocus=True)
+    chat_interface.queue()
+    chat_interface.launch()
