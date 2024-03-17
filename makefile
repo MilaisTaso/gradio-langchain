@@ -1,5 +1,5 @@
 run:
-	poetry run python src/gradio_app.py
+	poetry run gradio src/gradio_app.py
 lint:
 	poetry run flake8 src
 format:
