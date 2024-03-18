@@ -1,4 +1,4 @@
-from typing import Iterator
+from typing import Any, Iterator
 
 from langchain.globals import set_verbose, set_debug
 from langchain.memory import ChatMessageHistory
@@ -37,7 +37,7 @@ template = HumanMessagePromptTemplate.from_template(
 )
 
 
-def generate_message(message: str, history: ChatMessageHistory) -> Iterator[str]:
+def generate_message(message: str, history: ChatMessageHistory) -> tuple[Iterator[str], Any]:
     api_key = None
     if config.OPENAI_API_KEY:
         api_key = SecretStr(config.OPENAI_API_KEY)
@@ -53,6 +53,7 @@ def generate_message(message: str, history: ChatMessageHistory) -> Iterator[str]
 
     chain = prompt | lim | output_parser
 
-    response =  chain.stream({"chat_history": history, "human_input": message})
+    with get_openai_callback as cb:
+        response =  chain.stream({"chat_history": history, "human_input": message})
 
-    return response
+    return (response, cb)
