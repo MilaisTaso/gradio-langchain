@@ -48,12 +48,12 @@ def generate_message(message: str, history: ChatMessageHistory) -> tuple[Iterato
             template,
         ]
     )
-    lim = ChatOpenAI(model="gpt-3.5-turbo", api_key=api_key, temperature=0)
+    lim = ChatOpenAI(model="gpt-3.5-turbo", api_key=api_key, temperature=0, streaming=True)
     output_parser = StrOutputParser()
 
     chain = prompt | lim | output_parser
 
-    with get_openai_callback as cb:
+    with get_openai_callback() as cb:
         response =  chain.stream({"chat_history": history, "human_input": message})
 
     return (response, cb)

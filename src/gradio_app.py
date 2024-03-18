@@ -13,8 +13,11 @@ def predict(message, history):
         chat_history.add_ai_message(AIMessage(content=ai))
 
     partial_message = ""
+    
+    chunks, token = generate_message(message, chat_history)
+    print(token)
 
-    for chunk in generate_message(message, chat_history):
+    for chunk in chunks:
         partial_message += chunk
         yield partial_message
 
