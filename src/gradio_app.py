@@ -18,8 +18,20 @@ def predict(message, history):
         partial_message += chunk
         yield partial_message
 
+app = gr.Blocks()
+
+with app:
+    with gr.Row():
+        with gr.Column():
+            gr.Markdown("Setting")
+
+        with gr.Column() as chat_interface:
+            gr.ChatInterface(
+                fn=predict,
+                autofocus=True,
+            )
+
 
 if __name__ == "__main__":
-    chat_interface = gr.ChatInterface(fn=predict, autofocus=True)
-    chat_interface.queue()
-    chat_interface.launch()
+    app.queue()
+    app.launch()
