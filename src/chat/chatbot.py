@@ -7,6 +7,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_core.pydantic_v1 import SecretStr
+from langchain.callbacks import get_openai_callback
 
 from src.config import get_config
 
@@ -52,4 +53,6 @@ def generate_message(message: str, history: ChatMessageHistory) -> Iterator[str]
 
     chain = prompt | lim | output_parser
 
-    return chain.stream({"chat_history": history, "human_input": message})
+    response =  chain.stream({"chat_history": history, "human_input": message})
+
+    return response
