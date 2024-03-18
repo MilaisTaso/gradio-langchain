@@ -1,4 +1,5 @@
 import os
+from typing import Literal
 
 from dotenv import load_dotenv
 
@@ -8,7 +9,10 @@ load_dotenv(
 
 
 class Config:
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
+    LANGCHAIN_DEBUG_MODE: Literal["ALL", "VERBOSE"] | None = os.getenv(
+        "LANGCHAIN_DEBUG_MODE"
+    )
 
 
 def get_config() -> Config:
