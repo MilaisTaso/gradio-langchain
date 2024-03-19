@@ -1,5 +1,5 @@
 import os
-from typing import Literal
+from functools import cache
 
 from dotenv import load_dotenv
 
@@ -10,17 +10,21 @@ load_dotenv(
 
 class Config:
     OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
-    LANGCHAIN_DEBUG_MODE: Literal["ALL", "VERBOSE"] | None = os.getenv(
-        "LANGCHAIN_DEBUG_MODE"
-    )
+    LANGCHAIN_DEBUG_MODE: str | None = os.getenv("LANGCHAIN_DEBUG_MODE")
+
+    # Noneを許容する変数のリスト
+    ALLOW_NONE_VARIABLES: list[str] = [
+        "LANGCHAIN_DEBUG_MODE",
+    ]
 
 
+@cache
 def get_config() -> Config:
     config = Config()
 
     # Configクラスの全変数をループしてチェック
     for key, value in vars(config).items():
-        if value is None:
+        if value is None and key not in Config.ALLOW_NONE_VARIABLES:
             raise ValueError(f"{key} is not set in the environment variables.")
 
     return config
