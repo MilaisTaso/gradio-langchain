@@ -12,15 +12,10 @@ def predict(message, history):
         chat_history.add_user_message(HumanMessage(content=human))
         chat_history.add_ai_message(AIMessage(content=ai))
 
-    partial_message = ""
-
-    chunks, token = generate_message(message, chat_history)
+    message, token = generate_message(message, chat_history)
     print(token)
 
-    for chunk in chunks:
-        partial_message += chunk
-        yield partial_message
-
+    return message
 
 demo = gr.ChatInterface(
     fn=predict,

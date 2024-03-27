@@ -17,10 +17,10 @@ from src.config import get_config
 
 config = get_config()
 
-# if config.LANGCHAIN_DEBUG_MODE == "ALL":
-#     set_debug(True)
-# elif config.LANGCHAIN_DEBUG_MODE == "VERBOSE":
-#     set_verbose(True)
+if config.LANGCHAIN_DEBUG_MODE == "ALL":
+    set_debug(True)
+elif config.LANGCHAIN_DEBUG_MODE == "VERBOSE":
+    set_verbose(True)
 
 system_message = SystemMessage(
     content=(
@@ -51,7 +51,7 @@ class MyCustomHandler(BaseCallbackHandler):
 
 def generate_message(
     message: str, history: ChatMessageHistory
-) -> tuple[Iterator[str], Any]:
+) -> tuple[str, Any]:
     api_key = None
     if config.OPENAI_API_KEY:
         api_key = SecretStr(config.OPENAI_API_KEY)
@@ -74,6 +74,6 @@ def generate_message(
     chain = prompt | lim | output_parser
 
     with get_openai_callback() as cb:
-        response = chain.stream({"chat_history": history, "human_input": message})
+        response = chain.invoke({"chat_history": history, "human_input": message})
 
     return (response, cb)
