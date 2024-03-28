@@ -1,18 +1,20 @@
-from typing import Any
 import queue
+from typing import Any, Dict, List, Optional
+from uuid import UUID
 
-from langchain.callbacks import get_openai_callback
 from langchain.callbacks.base import AsyncCallbackHandler
+from langchain.callbacks.manager import get_openai_callback
+from langchain.callbacks.openai_info import OpenAICallbackHandler
 from langchain.globals import set_debug, set_verbose
 from langchain.memory import ChatMessageHistory
-from langchain_core.messages import SystemMessage
-from langchain_core.messages.base import BaseMessage
+from langchain.schema import LLMResult
+from langchain_core.messages import BaseMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import (ChatPromptTemplate,
                                     HumanMessagePromptTemplate)
 from langchain_core.pydantic_v1 import SecretStr
 from langchain_openai import ChatOpenAI
-from langchain.schema import LLMResult
+
 from src.config import get_config
 
 config = get_config()
@@ -44,17 +46,35 @@ template = HumanMessagePromptTemplate.from_template(
 class StreamingCallbackHandler(AsyncCallbackHandler):
     def __init__(self) -> None:
         self.que = queue.Queue()
+        self.tokens = []
+        self.encoder = 
         super().__init__()
-    
-    def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+
+    async def on_chat_model_start(
+        self,
+        serialized: Dict[str, Any],
+        messages: List[List[BaseMessage]],
+        *,
+        run_id: UUID,
+        parent_run_id: Optional[UUID] = None,
+        tags: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        **kwargs: Any
+    ) -> Any:
+        print(messages)
+
+    async def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         self.que.put(token)
 
-    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
+    async def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
         """Run when LLM ends running."""
+        print(response)
         self.que.put(None)
 
 
-async def generate_message(message: str, history: ChatMessageHistory, callback_handler:AsyncCallbackHandler):
+async def generate_message(
+    message: str, history: ChatMessageHistory, callback_handler: AsyncCallbackHandler
+):
     api_key = None
     if config.OPENAI_API_KEY:
         api_key = SecretStr(config.OPENAI_API_KEY)
@@ -65,6 +85,9 @@ async def generate_message(message: str, history: ChatMessageHistory, callback_h
             template,
         ]
     )
+
+    openai_callback = OpenAICallbackHandler()
+
     lim = ChatOpenAI(
         model="gpt-3.5-turbo",
         api_key=api_key,
@@ -76,7 +99,33 @@ async def generate_message(message: str, history: ChatMessageHistory, callback_h
 
     chain = prompt | lim | output_parser
 
-    with get_openai_callback() as cb:
-        await chain.ainvoke({"chat_history": history, "human_input": message})
+    await chain.ainvoke({"chat_history": history, "human_input": message})
+    
 
-    return cb, callback_handler
+def generate_sync_message(message: str, history: ChatMessageHistory):
+    api_key = None
+    if config.OPENAI_API_KEY:
+        api_key = SecretStr(config.OPENAI_API_KEY)
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            system_message,
+            template,
+        ]
+    )
+
+    lim = ChatOpenAI(
+        model="gpt-3.5-turbo",
+        api_key=api_key,
+        temperature=0,
+        streaming=True,
+    )
+    output_parser = StrOutputParser()
+
+    chain = prompt | lim | output_parser
+    
+    with get_openai_callback() as callback:
+        response = chain.invoke({"chat_history": history, "human_input": message})
+        print(callback)
+    
+    return response
