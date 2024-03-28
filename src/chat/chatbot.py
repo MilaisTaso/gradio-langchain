@@ -1,18 +1,18 @@
-from typing import Any, Iterator, Dict, List, Optional
-from uuid import UUID
+from typing import Any
+import queue
 
 from langchain.callbacks import get_openai_callback
+from langchain.callbacks.base import AsyncCallbackHandler
 from langchain.globals import set_debug, set_verbose
 from langchain.memory import ChatMessageHistory
-from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import SystemMessage
+from langchain_core.messages.base import BaseMessage
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.outputs import LLMResult
-from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
+from langchain_core.prompts import (ChatPromptTemplate,
+                                    HumanMessagePromptTemplate)
 from langchain_core.pydantic_v1 import SecretStr
 from langchain_openai import ChatOpenAI
-from langchain_core.messages.base import BaseMessage
-
+from langchain.schema import LLMResult
 from src.config import get_config
 
 config = get_config()
@@ -41,17 +41,20 @@ template = HumanMessagePromptTemplate.from_template(
 )
 
 
-class MyCustomHandler(BaseCallbackHandler):
-    def on_llm_new_token(self, token: str, **kwargs) -> None:
-        print(f"My custom handler, token: {token}")
-        
-    def on_chat_model_start(self, serialized: Dict[str, Any], message: List[BaseMessage], run_id: UUID, parent_run_id: Optional[UUID], **kwargs):
-        print(message)
+class StreamingCallbackHandler(AsyncCallbackHandler):
+    def __init__(self) -> None:
+        self.que = queue.Queue()
+        super().__init__()
+    
+    def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+        self.que.put(token)
+
+    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
+        """Run when LLM ends running."""
+        self.que.put(None)
 
 
-def generate_message(
-    message: str, history: ChatMessageHistory
-) -> tuple[str, Any]:
+async def generate_message(message: str, history: ChatMessageHistory, callback_handler:AsyncCallbackHandler):
     api_key = None
     if config.OPENAI_API_KEY:
         api_key = SecretStr(config.OPENAI_API_KEY)
@@ -67,13 +70,13 @@ def generate_message(
         api_key=api_key,
         temperature=0,
         streaming=True,
-        callbacks=[MyCustomHandler()],
+        callbacks=[callback_handler],
     )
     output_parser = StrOutputParser()
 
     chain = prompt | lim | output_parser
 
     with get_openai_callback() as cb:
-        response = chain.invoke({"chat_history": history, "human_input": message})
+        await chain.ainvoke({"chat_history": history, "human_input": message})
 
-    return (response, cb)
+    return cb, callback_handler
