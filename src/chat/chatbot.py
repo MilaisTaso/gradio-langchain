@@ -47,7 +47,6 @@ class StreamingCallbackHandler(AsyncCallbackHandler):
     def __init__(self) -> None:
         self.que = queue.Queue()
         self.tokens = []
-        self.encoder = 
         super().__init__()
 
     async def on_chat_model_start(
@@ -86,8 +85,6 @@ async def generate_message(
         ]
     )
 
-    openai_callback = OpenAICallbackHandler()
-
     lim = ChatOpenAI(
         model="gpt-3.5-turbo",
         api_key=api_key,
@@ -100,32 +97,3 @@ async def generate_message(
     chain = prompt | lim | output_parser
 
     await chain.ainvoke({"chat_history": history, "human_input": message})
-    
-
-def generate_sync_message(message: str, history: ChatMessageHistory):
-    api_key = None
-    if config.OPENAI_API_KEY:
-        api_key = SecretStr(config.OPENAI_API_KEY)
-
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            system_message,
-            template,
-        ]
-    )
-
-    lim = ChatOpenAI(
-        model="gpt-3.5-turbo",
-        api_key=api_key,
-        temperature=0,
-        streaming=True,
-    )
-    output_parser = StrOutputParser()
-
-    chain = prompt | lim | output_parser
-    
-    with get_openai_callback() as callback:
-        response = chain.invoke({"chat_history": history, "human_input": message})
-        print(callback)
-    
-    return response
