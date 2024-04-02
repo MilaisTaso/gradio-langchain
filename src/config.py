@@ -11,6 +11,8 @@ load_dotenv(
 class Config:
     OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
     LANGCHAIN_DEBUG_MODE: str | None = os.getenv("LANGCHAIN_DEBUG_MODE")
+    STABILITY_API_KEY: str | None = os.getenv("STABILITY_API_KEY")
+    STABILITY_API_HOST: str = "https://api.stability.ai"
 
     # Noneを許容する変数のリスト
     ALLOW_NONE_VARIABLES: list[str] = [

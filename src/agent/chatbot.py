@@ -3,8 +3,6 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from langchain.callbacks.base import AsyncCallbackHandler
-from langchain.callbacks.manager import get_openai_callback
-from langchain.callbacks.openai_info import OpenAICallbackHandler
 from langchain.globals import set_debug, set_verbose
 from langchain.memory import ChatMessageHistory
 from langchain.schema import LLMResult

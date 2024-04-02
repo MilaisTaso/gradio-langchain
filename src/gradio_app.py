@@ -1,39 +1,47 @@
 import gradio as gr
-from anyio.from_thread import start_blocking_portal
-from langchain.memory import ChatMessageHistory
-from langchain.schema import AIMessage, HumanMessage
+from langchain.globals import set_verbose
 
 from core import __set_base_path__
-from src.chat.chatbot import StreamingCallbackHandler, generate_message
+from src.agent.stable_diffusion import generate_sd_prompt
 
 
-def predict(message, history):
-    callback_handler = StreamingCallbackHandler()
-    chat_history = ChatMessageHistory()
-    for human, ai in history:
-        chat_history.add_user_message(HumanMessage(content=human))
-        chat_history.add_ai_message(AIMessage(content=ai))
+def generate_image(
+    prompt: str, models: str, temperature: int, width: float, height: float
+):
+    response, token_info, image = generate_sd_prompt(
+        prompt, models, temperature, width, height
+    )
 
-    with start_blocking_portal() as portal:
-        portal.start_task_soon(
-            generate_message, message, chat_history, callback_handler
-        )
+    return (response, image, token_info.total_tokens, token_info.total_cost)
 
-        response = ""
-        while True:
-            next_token = callback_handler.que.get()
-            if next_token is None:
-                break
-            response += next_token
 
-            yield response
-        
+prompt_input = gr.Textbox(label="Prompt", placeholder="Here is Prompt")
 
-demo = gr.ChatInterface(
-    fn=predict,
-    autofocus=True,
+model_selector = gr.Radio(
+    choices=["gpt-3.5-turbo", "gpt-4"],
+    label="Models",
+    value="gpt-3.5-turbo",
+    type="value",
+)
+
+tmp_slider = gr.Slider(minimum=0, maximum=1, step=0.05, label="Temperature")
+width_slider = gr.Slider(minimum=512, maximum=2048, step=1, label="Width")
+height_slider = gr.Slider(minimum=512, maximum=2048, step=1, label="Height")
+
+output_sd_prompt = gr.TextArea(label="Generated Prompt")
+output_image = gr.Image(label="Output Image")
+total_tokens = gr.Textbox(label="Total tokens")
+total_cost = gr.Textbox(label="Total Cost (chatGPT)")
+
+
+demo = gr.Interface(
+    fn=generate_image,
+    inputs=[prompt_input, model_selector, tmp_slider, width_slider, height_slider],
+    outputs=[output_sd_prompt, output_image, total_tokens, total_cost],
 )
 
 if __name__ == "__main__":
+    set_verbose(True)
+
     demo.queue()
-    demo.launch()
+    demo.launch(server_port=7861)
