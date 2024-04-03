@@ -6,13 +6,13 @@ from src.agent.stable_diffusion import generate_sd_prompt
 
 
 def generate_image(
-    prompt: str, models: str, temperature: int, width: float, height: float
+    prompt: str, models: str, temperature: int, aspect_ratio: str, art_style: str
 ):
-    response, token_info, image = generate_sd_prompt(
-        prompt, models, temperature, width, height
+    response, token_info, images = generate_sd_prompt(
+        prompt, models, temperature, aspect_ratio, art_style
     )
 
-    return (response, image, token_info.total_tokens, token_info.total_cost)
+    return (response, images, token_info.total_tokens, token_info.total_cost)
 
 
 prompt_input = gr.Textbox(label="Prompt", placeholder="Here is Prompt")
@@ -27,6 +27,11 @@ model_selector = gr.Radio(
 tmp_slider = gr.Slider(minimum=0, maximum=1, step=0.05, label="Temperature")
 width_slider = gr.Slider(minimum=512, maximum=2048, step=1, label="Width")
 height_slider = gr.Slider(minimum=512, maximum=2048, step=1, label="Height")
+accept_dropdown = gr.Dropdown(
+    choices=["16:9", "1:1", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"],
+    label="accept ratio",
+)
+styles_dropdown = gr.Dropdown(choices=[("アニメ", "anime style"), ("リアル","realistic"), ("ベクターアート", "vector art"), ("水彩", "watercolor"), ("キアロスクーロ", "chiaroscuro")], label="Art Style")
 
 output_sd_prompt = gr.TextArea(label="Generated Prompt")
 output_image = gr.Image(label="Output Image")
@@ -36,7 +41,7 @@ total_cost = gr.Textbox(label="Total Cost (chatGPT)")
 
 demo = gr.Interface(
     fn=generate_image,
-    inputs=[prompt_input, model_selector, tmp_slider, width_slider, height_slider],
+    inputs=[prompt_input, model_selector, tmp_slider, accept_dropdown, styles_dropdown],
     outputs=[output_sd_prompt, output_image, total_tokens, total_cost],
 )
 

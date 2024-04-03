@@ -8,8 +8,7 @@ from langchain.memory import ChatMessageHistory
 from langchain.schema import LLMResult
 from langchain_core.messages import BaseMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import (ChatPromptTemplate,
-                                    HumanMessagePromptTemplate)
+from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
 from langchain_core.pydantic_v1 import SecretStr
 from langchain_openai import ChatOpenAI
 
