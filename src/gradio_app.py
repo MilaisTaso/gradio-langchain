@@ -2,14 +2,18 @@ import gradio as gr
 from langchain.globals import set_verbose
 
 from core import __set_base_path__
-from src.agent.stable_diffusion import generate_sd_prompt
+from src.agent.sd_prompt import SDPromptGenerator
 
 
 def generate_image(
     prompt: str, models: str, temperature: int, aspect_ratio: str, art_style: str
 ):
-    response, token_info, images = generate_sd_prompt(
-        prompt, models, temperature, aspect_ratio, art_style
+    generator = SDPromptGenerator(models, temperature)
+    response, token_info, images = generator.generate_sd_prompt(
+        prompt=prompt,
+        api_version="core",
+        aspect_ratio=aspect_ratio,
+        art_style=art_style,
     )
 
     return (response, images, token_info.total_tokens, token_info.total_cost)
@@ -31,7 +35,16 @@ accept_dropdown = gr.Dropdown(
     choices=["16:9", "1:1", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"],
     label="accept ratio",
 )
-styles_dropdown = gr.Dropdown(choices=[("アニメ", "anime style"), ("リアル","realistic"), ("ベクターアート", "vector art"), ("水彩", "watercolor"), ("キアロスクーロ", "chiaroscuro")], label="Art Style")
+styles_dropdown = gr.Dropdown(
+    choices=[
+        ("アニメ", "anime style"),
+        ("リアル", "realistic"),
+        ("ベクターアート", "vector art"),
+        ("水彩", "watercolor"),
+        ("キアロスクーロ", "chiaroscuro"),
+    ],
+    label="Art Style",
+)
 
 output_sd_prompt = gr.TextArea(label="Generated Prompt")
 output_image = gr.Image(label="Output Image")

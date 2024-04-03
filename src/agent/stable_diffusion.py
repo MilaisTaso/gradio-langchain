@@ -1,213 +1,202 @@
 import base64
-import os
-from typing import Any
 import io
+import os
 import uuid
+from abc import ABCMeta, abstractmethod
+from typing import Callable, Literal, Type, TypeVar
 
 import numpy as np
 import requests
-from langchain.callbacks.manager import get_openai_callback
-from langchain.globals import set_debug, set_verbose
-from langchain_community.callbacks.openai_info import OpenAICallbackHandler
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
-from langchain_core.pydantic_v1 import SecretStr
-from langchain_core.runnables import RunnablePassthrough
-from langchain_openai import ChatOpenAI
 from PIL import Image
 
 from src.config import get_config
 
+T = TypeVar("T", bound="StableDiffusionGenerator")
+
 config = get_config()
 
-if config.LANGCHAIN_DEBUG_MODE == "ALL":
-    set_debug(True)
-elif config.LANGCHAIN_DEBUG_MODE == "VERBOSE":
-    set_verbose(True)
+api_type = Literal["local", "v1", "core"]
 
-SD_DESIGN_TEMPLATE = """
-    You are an excellent designer. With the information given by the user, you can describe an illustration that would impress any illustrator or novelist.
+QUALITY_PROMPT = "best quality, masterpiece, extremely detailed, "
 
-    All you have to do is to use your imagination to describe the details of the illustration scene from the information given by the user.
-    Specifically, you should describe the person's clothing, hairstyle, facial expression, age, gender, and other external characteristics; the person's facial expression, state of mind, and emotional landscape; the illustration's composition and object placement (what objects are where and their characteristics); the surrounding landscape and geography, weather and sky conditions, light levels, and the atmosphere conveyed to the person viewing the illustration.
-    You will describe the scenery and the placement of the objects (what objects are located where and their characteristics), the surrounding landscape and geography, the weather and sky, the light and the atmosphere conveyed to the viewer. You are very good at describing a scene in a way that appeals to the user. Users are looking for illustrations with people in them. Another person will do the actual illustration, so you should concentrate only on describing the details.
-
-    Use your imagination.
-"""
-
-SD_PROMPT_TEMPLATE = """
-    You are a talented illustrator. From a description of a scene given by a designer, you can use Stable Diffusion (an image generation model) to generate an illustration that will amaze any designer or artist.
-
-    To generate an illustration, a list of words called "prompt" is required. The prompt determine the quality of the illustration. The more variegated words you include, the more information you include, the better the illustration.
-    Please output a brief, carefully selected output of about 20 words for the prompt. You do not have to present the words as they are given by the user, and you may supplement them with other words from your imagination if necessary.
-
-    Prompt output must be in English, and output must be comma-separated word strings.
-"""
+NEGATIVE_PROMPT = "low quality, worst quality, out of focus, ugly, error, jpeg artifacts, lowers, blurry, bokeh, \
+    bad anatomy, long_neck, long_body, longbody, deformed mutated disfigured, missing arms, extra_arms, mutated hands, \
+    extra_legs, bad hands, poorly_drawn_hands, malformed_hands, missing_limb, floating_limbs, disconnected_limbs, extra_fingers, \
+    bad fingers, liquid fingers, poorly drawn fingers, missing fingers, extra digit, fewer digits, ugly face, deformed eyes, \
+    partial face, partial head, bad face, inaccurate limb, cropped text, signature, watermark, username, artist name, stamp, title, \
+    subtitle, date, footer, header"
 
 
-def generate_sd_prompt(
-    prompt: str, models: str, temperature: float, aspect_ratio: str, art_style: str
-) -> tuple[str, OpenAICallbackHandler, Any]:
-    api_key = None
-    if config.OPENAI_API_KEY:
-        api_key = SecretStr(config.OPENAI_API_KEY)
+class StableDiffusionGenerator(metaclass=ABCMeta):
+    def __init__(self) -> None:
+        if config.STABILITY_API_KEY is None:
+            raise ValueError("Missing Stability AI API Key")
+        self.api_key = config.STABILITY_API_KEY
+        self.quality_prompt = QUALITY_PROMPT
+        self.negative_prompt = NEGATIVE_PROMPT
 
-    sd_design_template = ChatPromptTemplate.from_messages(
-        [
-            SystemMessagePromptTemplate.from_template(SD_DESIGN_TEMPLATE),
-            ("human", "{human_input}"),
-        ]
-    )
-
-    sd_prompt_template = ChatPromptTemplate.from_messages(
-        [
-            SystemMessagePromptTemplate.from_template(SD_PROMPT_TEMPLATE),
-            ("human", "{ai_input}"),
-        ]
-    )
-
-    lim = ChatOpenAI(
-        model=models, api_key=api_key, temperature=temperature, verbose=True
-    )
-
-    output_parser = StrOutputParser()
-
-    chain = (
-        {
-            "ai_input": sd_design_template | lim | output_parser,
-            "human_input": RunnablePassthrough(),
-        }
-        | sd_prompt_template
-        | lim
-        | output_parser
-    )
-
-    with get_openai_callback() as callback:
-        response = chain.invoke({"human_input": prompt})
-    image = generate_image(response, aspect_ratio, art_style)
-
-    return (response, callback, image)
-
-
-def generate_image(prompt: str, aspect_ratio: str = "1:1", art_style: str = ""):
-    quality_prompt = "best quality, masterpiece, extremely detailed, "
-    negative_prompt = "low quality, worst quality, out of focus, ugly, error, jpeg artifacts, lowers, blurry, bokeh, \
-        bad anatomy, long_neck, long_body, longbody, deformed mutated disfigured, missing arms, extra_arms, mutated hands, \
-        extra_legs, bad hands, poorly_drawn_hands, malformed_hands, missing_limb, floating_limbs, disconnected_limbs, extra_fingers, \
-        bad fingers, liquid fingers, poorly drawn fingers, missing fingers, extra digit, fewer digits, ugly face, deformed eyes, \
-        partial face, partial head, bad face, inaccurate limb, cropped text, signature, watermark, username, artist name, stamp, title, \
-        subtitle, date, footer, header"
-
-    # ? local hugging face
-    # url = "http://127.0.0.1:7860"
-    # payload = {
-    #     "prompt": quality_prompt + prompt,
-    #     "negative_prompt": negative_prompt,
-    #     "steps": 35,
-    #     "width": width,
-    #     "height": height,
-    # }
-    # response = requests.post(url=f"{url}/sdapi/v1/txt2img", json=payload)
-
-    # decoded_data = base64.b64decode(response.json()["images"][0])
-
-    # image = Image.open(io.BytesIO(decoded_data))
-    # image_np = np.array(image)
-
-    # return image_np
-
-    #! version1
-    # engine_id = "stable-diffusion-v1-6"
-    # api_host = config.STABILITY_API_HOST
-    # api_key = config.STABILITY_API_KEY
-
-    # if api_key is None:
-    #     raise Exception("Missing Stability API key.")
-
-    # response = requests.post(
-    #     f"{api_host}/v1/generation/{engine_id}/text-to-image",
-    #     headers={
-    #         "Content-Type": "application/json",
-    #         "Accept": "application/json",
-    #         "Authorization": f"Bearer {api_key}"
-    #     },
-    #     json={
-    #         "text_prompts": [
-    #             {
-    #                 "text": quality_prompt + prompt,
-    #                 "weight": 0.7
-    #             }
-    #         ],
-    #         "cfg_scale": 7,
-    #         "height": height,
-    #         "width": width,
-    #         "samples": 1,
-    #         "steps": 30,
-    #         "sampler": "DDIM",
-    #         "style_preset": "anime"
-    #     },
-    # )
-
-    # data = response.json()
-
-    # if response.status_code != 200:
-    #     raise Exception("Non-200 response: " + str(response.text))
-
-    # # 保存先のディレクトリパス
-    # output_dir = "./output"
-
-    # # ディレクトリが存在しない場合は作成
-    # if not os.path.exists(output_dir):
-    #     os.makedirs(output_dir)
-
-    # output_images = []
-
-    # for i, image in enumerate(data["artifacts"]):
-    #     decoded_image = base64.b64decode(image["base64"])
-    #     io_image = Image.open(io.BytesIO(decoded_image))
-    #     image_np = np.array(io_image)
-    #     output_images.append(image_np)
-
-    #     with open(f"./{output_dir}/v1_txt2img_{i}.png", "wb") as f:
-    #         f.write(decoded_image)
-
-    # return output_images
-
-    # * stability core
-    api_key = config.STABILITY_API_KEY
-
-    if api_key is None:
-        raise Exception("Missing Stability API key.")
-
-    response = requests.post(
-        f"https://api.stability.ai/v2beta/stable-image/generate/core",
-        headers={"authorization": api_key, "accept": "application/json"},
-        files={"none": ""},
-        data={
-            "prompt": f"({quality_prompt}:1.3) + ({art_style}:1.4) + {prompt}",
-            "negative_prompt": negative_prompt,
-            "output_format": "webp",
-            "aspect_ratio": aspect_ratio,
-        },
-    )
-
-    data = response.json()
-
-    if response.status_code == 200 and data.get("finish_reason") == "SUCCESS":
-        # # 保存先のディレクトリパス
-        output_dir = "./output"
-
+    def save_image(self, decoded_image: bytes, output_dir: str = "./output"):
         # ディレクトリが存在しない場合は作成
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        decoded_image = base64.b64decode(data.get("image"))
+        with open(f"./{output_dir}/v1_txt2img_{uuid.uuid4()}.png", "wb") as f:
+            f.write(decoded_image)
+
+    def decoded_image(self, encoded_data: bytes | str, *args, **kwargs):
+        decoded_image = base64.b64decode(encoded_data)
         io_image = Image.open(io.BytesIO(decoded_image))
         image_np = np.array(io_image)
 
-        with open(f"./{output_dir}/v1_txt2img_{uuid.uuid4()}.webp", "wb") as file:
-            file.write(decoded_image)
-    else:
-        raise Exception(str(response.json()))
+        return decoded_image, image_np
 
-    return image_np
+    @abstractmethod
+    def generate_image(self, prompt: str, *args, **kwargs):
+        pass
+
+
+class SDGeneratorFactory:
+    _generator_types: dict[api_type, Type[StableDiffusionGenerator]] = {}
+
+    @classmethod
+    def register(cls, generator_type: api_type) -> Callable:
+        def decorator(cls_: Type[T]) -> Type[T]:
+            if not issubclass(cls_, StableDiffusionGenerator):
+                raise TypeError("this object is not StableDiffusionGenerator class")
+            cls._generator_types[generator_type] = cls_
+            return cls_
+
+        return decorator
+
+    @classmethod
+    def create(
+        cls, generator_type: api_type, *args, **kwargs
+    ) -> StableDiffusionGenerator:
+        generator_cls = cls._generator_types.get(generator_type)
+        if generator_cls is None:
+            raise ValueError(f"Generator type {generator_type} is not registered")
+        return generator_cls(*args, **kwargs)
+
+
+@SDGeneratorFactory.register("core")
+class SDCoreGenerator(StableDiffusionGenerator):
+    def __init__(self):
+        super().__init__()
+
+    def generate_image(self, prompt: str, art_style: str, *args, **kwargs):
+        art_style = kwargs.get("art_style", "")
+        aspect_ratio = kwargs.get("aspect_ratio", "1:1")
+
+        response = requests.post(
+            f"https://api.stability.ai/v2beta/stable-image/generate/core",
+            headers={"authorization": self.api_key, "accept": "application/json"},
+            files={"none": ""},
+            data={
+                "prompt": f"({self.quality_prompt}:1.3) + ({art_style}:1.4) + {prompt}",
+                "negative_prompt": self.negative_prompt,
+                "output_format": "webp",
+                "aspect_ratio": aspect_ratio,
+            },
+        )
+
+        data = response.json()
+
+        if response.status_code == 200 and data.get("finish_reason") == "SUCCESS":
+            # # 保存先のディレクトリパス
+            output_dir = "./output"
+
+            # ディレクトリが存在しない場合は作成
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+
+            decoded_image = base64.b64decode(data.get("image"))
+            io_image = Image.open(io.BytesIO(decoded_image))
+            image_np = np.array(io_image)
+
+            with open(f"./{output_dir}/v1_txt2img_{uuid.uuid4()}.webp", "wb") as file:
+                file.write(decoded_image)
+        else:
+            raise Exception(str(response.json()))
+
+        return image_np
+
+
+@SDGeneratorFactory.register("v1")
+class SDV1Generator(StableDiffusionGenerator):
+    def __init__(self, engine_id="stable-diffusion-v1-6") -> None:
+        super().__init__()
+        self.engine_id = engine_id
+        self.api_host = config.STABILITY_API_HOST
+
+    def generate_image(self, prompt: str, *args, **kwargs):
+        width = kwargs.get("width", 512)
+        height = kwargs.get("height", 512)
+
+        response = requests.post(
+            f"{self.api_host}/v1/generation/{self.engine_id}/text-to-image",
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            },
+            json={
+                "text_prompts": [{"text": self.quality_prompt + prompt, "weight": 0.7}],
+                "cfg_scale": 7,
+                "height": height,
+                "width": width,
+                "samples": 1,
+                "steps": 30,
+                "sampler": "DDIM",
+                "style_preset": "anime",
+            },
+        )
+
+        data = response.json()
+
+        if response.status_code != 200:
+            raise Exception("Non-200 response: " + str(response.text))
+
+        output_images = []
+
+        for image in data["artifacts"]:
+            decoded_image, image_np = self.decoded_image(image["base64"])
+
+            self.save_image(decoded_image)
+            output_images.append(image_np)
+
+        return output_images
+
+
+@SDGeneratorFactory.register("local")
+class SDLocalGenerator(StableDiffusionGenerator):
+    def __init__(self, url: str = "http://127.0.0.1:7860") -> None:
+        super().__init__()
+        self.url = url
+
+    def generate_image(self, prompt: str, *args, **kwargs):
+        width = kwargs.get("width", 512)
+        height = kwargs.get("height", 512)
+
+        payload = {
+            "prompt": self.quality_prompt + prompt,
+            "negative_prompt": self.negative_prompt,
+            "steps": 35,
+            "width": width,
+            "height": height,
+        }
+        response = requests.post(url=f"{self.url}/sdapi/v1/txt2img", json=payload)
+
+        data = response.json()
+
+        if response.status_code != 200:
+            raise Exception("Non-200 response: " + str(response.text))
+
+        output_images = []
+
+        for image in data["images"]:
+            decoded_image, image_np = self.decoded_image(image)
+
+            self.save_image(decoded_image)
+            output_images.append(image_np)
+
+        return output_images
